@@ -66,6 +66,16 @@
   .toast.show { transform: translateX(-50%) translateY(0); }
   .toast.ok { background: var(--accent); color: #000; }
   .toast.err { background: var(--error); color: #fff; }
+  .field-with-copy { display: flex; gap: 6px; align-items: center; flex: 1; }
+  .field-with-copy input { flex: 1; }
+  .copy-mini { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text2); font-size: 12px; cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: all 0.15s; }
+  .copy-mini:active { opacity: 0.7; }
+  .copy-mini.copied { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+  .desc-block { margin-top: 14px; }
+  .desc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .desc-head label { font-size: 11px; color: var(--text2); }
+  .desc-block textarea { width: 100%; min-height: 140px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 13px; line-height: 1.7; outline: none; resize: vertical; font-family: inherit; }
+  .desc-block textarea:focus { border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -121,12 +131,24 @@
 
 <div class="card result" id="resultCard">
   <h3>✅ 解析結果（編集可）</h3>
-  <div class="result-field"><label>商品名</label><input id="r_name" /></div>
+  <div class="result-field"><label>商品名</label>
+    <div class="field-with-copy">
+      <input id="r_name" />
+      <button class="copy-mini" onclick="copyField(this, 'r_name')">📋 コピー</button>
+    </div>
+  </div>
   <div class="result-field"><label>ジャンル</label><input id="r_genre" /></div>
   <div class="result-field"><label>系統</label><input id="r_style" /></div>
   <div class="result-field"><label>ブランド</label><input id="r_brand" /></div>
   <div class="result-field"><label>出品価格</label><input id="r_price" type="number" placeholder="0" /></div>
   <div class="result-field"><label>状態</label><input id="r_condition" value="目立った傷や汚れなし" /></div>
+  <div class="desc-block">
+    <div class="desc-head">
+      <label>商品説明文（編集可）</label>
+      <button class="copy-mini" onclick="copyField(this, 'r_desc')">📋 コピー</button>
+    </div>
+    <textarea id="r_desc" placeholder="AIが生成した説明文がここに入ります"></textarea>
+  </div>
   <br>
   <button class="btn btn-primary" onclick="doWrite()">📊 スプシに書き込む</button>
   <button class="btn btn-secondary" onclick="doReset()">↩ 別の商品</button>
@@ -245,12 +267,12 @@ function checkReady() {
   try {
     const content = [
       ...validB64s.map(b => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b } })),
-      { type: 'text', text: 'この商品画像を分析してください。以下のJSONのみを返してください（説明文不要）：\n{"name":"メルカリで売れる商品名40文字以内","genre":"トップス/ボトムス/アウター/ワンピース/その他から選択","style":"韓国系/古着/ストリート/きれいめ/ナチュラル/モード/カジュアル/その他から選択","brand":"タグのブランド名（不明なら空文字）","condition":"目立った傷や汚れなし"}' }
+      { type: 'text', text: 'この商品画像を分析してください。以下のJSONのみを返してください（説明文不要）：\n{"name":"メルカリで売れる商品名40文字以内。検索されやすいキーワード（ブランド・カテゴリ・系統・特徴）を詰め込む","genre":"トップス/ボトムス/アウター/ワンピース/その他から選択","style":"韓国系/古着/ストリート/きれいめ/ナチュラル/モード/カジュアル/その他から選択","brand":"タグのブランド名（不明なら空文字）","condition":"目立った傷や汚れなし","description":"メルカリ出品用の商品説明文300文字程度。写真から読み取れる特徴（素材・色・デザイン・状態）を具体的に書き、どんな人やコーデに合うかの提案を入れ、購入を後押しする一言で締める。絵文字を2〜3個使って親しみやすく"}' }
     ];
     const res = await fetch(PROXY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey, model: 'claude-sonnet-4-5', max_tokens: 500, messages: [{ role: 'user', content }] })
+      body: JSON.stringify({ apiKey, model: 'claude-sonnet-4-5', max_tokens: 1500, messages: [{ role: 'user', content }] })
     });
     const data = await res.json();
     if (!data.content || !data.content[0]) throw new Error(JSON.stringify(data));
@@ -262,6 +284,7 @@ function checkReady() {
     $('r_brand').value = json.brand || '';
     $('r_price').value = '';
     $('r_condition').value = json.condition || '目立った傷や汚れなし';
+    $('r_desc').value = json.description || '';
     $('resultCard').classList.add('active');
     $('resultCard').scrollIntoView({ behavior: 'smooth' });
   } catch (e) {
@@ -312,6 +335,34 @@ function doReset() {
   $('uploadArea').classList.remove('has-files');
   $('analyzeBtn').disabled = true;
   $('resultCard').classList.remove('active');
+  $('r_desc').value = '';
+}
+
+function copyField(btn, id) {
+  const el = $(id);
+  const text = el.value;
+  if (!text) { toast('コピーする内容がありません', 'err'); return; }
+  const done = () => {
+    btn.textContent = '✓ コピーした！';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = '📋 コピー';
+      btn.classList.remove('copied');
+    }, 1500);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(el, done));
+  } else {
+    fallbackCopy(el, done);
+  }
+}
+
+function fallbackCopy(el, done) {
+  el.select();
+  el.setSelectionRange(0, 99999);
+  try { document.execCommand('copy'); done(); }
+  catch(e) { toast('コピーできませんでした', 'err'); }
+  window.getSelection().removeAllRanges();
 }
 
 function $(id) { return document.getElementById(id); }
